@@ -15,8 +15,10 @@ import torch.nn as nn
 from torchtyping import TensorType
 import torchvision.utils as tvu
 import tyro
+import gzip
+import io
 
-from scripts.utils.oneformer_post_processor import post_process_panoptic_segmentation
+from utils.oneformer_post_processor import post_process_panoptic_segmentation
 
 @dataclass
 class Args:
@@ -52,7 +54,14 @@ def main(args: Args):
     panoptic_results = post_process_panoptic_segmentation(
         outputs, target_sizes=[image.size[::-1]]
     )
-
+    
+    # Gzip
+    buf = io.BytesIO()
+    torch.save(panoptic_results, buf)
+    buf.seek(0)
+    with gzip.open("../data/onef_outputs/oneformer.ptz", 'wb') as f:
+        f.write(buf.read())
+    
     print("Done")
 
 if __name__ == "__main__":
