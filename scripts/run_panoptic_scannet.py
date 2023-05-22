@@ -27,8 +27,7 @@ import tyro
 try:
     from scripts.utils.constants import SCANNET_COLORS
     from scripts.utils.label_translator import COCOtoScanNet
-    from scripts.utils.oneformer_post_processor import post_process_panoptic_segmentation
-    from scripts.utils.visualizer import ColorMode, Visualizer
+    from scripts.utils.visualizer import Visualizer
 except ImportError:
     print(
         "Import error occured. Possibly PYTHONPATH is not set. Please set PYTHONPATH to root of this repository."
@@ -40,16 +39,15 @@ patch_typeguard()
 @dataclass
 class Args:
 
-    ####
-    # TODO: remove default value after debugging
-    image_dir: str = "/home/dreamy1534/Projects/seg-nerf/dependencies/panoptic-lifting/data/scannet/scene0423_02/color"
-    ####
+    image_dir: str
     """Directory containing input images."""
+    tag: str
+    """A tag used to label the processed data."""
     oneformer_name: str = "shi-labs/oneformer_coco_swin_large"
     """Name of OneFormer pre-trained model. Set to `shi-labs/oneformer_coco_swin_large` by default."""
     is_reduced_scannet: bool = True
     """A flag indicating whether to use reduced ScanNet classes. Set to True by default."""
-    out_dir: str = "debug_outputs"
+    out_dir: str = "outputs"
     """Directory to save output images."""
 
 def find_images(directory: str) -> List[str]:
@@ -77,7 +75,7 @@ def main(args: Args):
     files_to_process = find_images(args.image_dir)
 
     # create output directories
-    out_dir = Path(args.out_dir)
+    out_dir = Path(args.out_dir) / args.tag
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Created directory: {str(out_dir)}")
     
@@ -127,7 +125,6 @@ def main(args: Args):
         processed_data = process_image(image, processor, model, coco_to_scannet)
         assert len(processed_data) == 1, "Only one image should be processed at a time"
 
-
         # visualize results
         visualizer = visualizer_func(np.array(image))
 
@@ -136,7 +133,7 @@ def main(args: Args):
             panoptic_seg.to("cpu"), segments_info,
         )
 
-        # TODO: save results
+        # save outputs
         save_panoptic(
             processed_data[0], processed_data[0], panoptic_dir / f"{image_file.stem}.ptz",
         )
@@ -189,7 +186,6 @@ def process_oneformer_panoptic_outputs(
     label_translator: COCOtoScanNet,
     object_mask_threshold: float = 0.8,
     overlap_threshold: float = 0.8,
-# ) -> Dict[str, TensorType]:
 ) -> List:
     """
     Processses the prediction results from OneFormer.
@@ -304,13 +300,6 @@ def post_tta_merging(
     num_scannet_classes,
     overlap_threshold: float = 0.8,
 ):
-    # cur_mask_cls_probabilities = cur_mask_cls_probabilities.to(self.device)
-    # cur_masks = cur_masks.to(self.device)
-
-    ####
-    # 20230522 Take two variables as input
-    # scannet_thing_ids, num_scannet_classes = get_thing_semantics()
-    ####
 
     processed_results = [{}]
     cur_scores, cur_classes = cur_mask_cls_probabilities.max(-1)
@@ -377,15 +366,6 @@ def post_tta_merging(
 def save_panoptic(predictions, predictions_notta, out_filename):
     mask, segments, probabilities, confidences = predictions["panoptic_seg"]
     mask_notta, segments_notta, _, confidences_notta = predictions_notta["panoptic_seg"]
-    # since we use cat_ids from scannet, no need for mapping
-    # for segment in segments:
-    #     cat_id = segment["category_id"]
-    #     segment["category_name"] = demo.metadata.stuff_classes[cat_id]
-    
-    ####
-    # print(f"Saving file at {str(out_filename)}...")
-    # exit(0)
-    ####
 
     with gzip.open(out_filename, "wb") as fid:
         torch.save(
